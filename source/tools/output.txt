@@ -1,0 +1,13 @@
+[MAIN EXECUTABLE]: /home/oracle/dev/cs5231/retwatcher/test/a.out
+rtn: _start
+rtn: 
+_init
+rtn: main
+rtn: _Z4vulnPc
+rtn: strcpy@plt
+rtn: .plt
+----------[ILLEGAL RETURN]----------
+ROUTINE: 
+EXPECTED: 0x0000564d8319f18d | ACTUAL: 0x3837363534333231
+RECOVERY: RETURNING TO EXPECTED ADDRESS
+----------[ILLEGAL RETURN]----------
