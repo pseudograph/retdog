@@ -17,6 +17,14 @@ std::stack<ADDRINT> callStack;
 std::stack<ADDRINT> bpStack;
 std::string mainImage;
 
+enum MEMSTATE {
+    ACTIVE,
+    FREEING,
+    FREE
+};
+
+std::unordered_map<ADDRINT, MEMSTATE> heap;
+
 /* ===================================================================== */
 // Command line switches
 /* ===================================================================== */
@@ -67,11 +75,11 @@ VOID printRoutineName(VOID* name) {
 }
 
 
-VOID testCall(VOID* ip, CONTEXT* ctx, VOID* v) {
+VOID insertBP(VOID* ip, CONTEXT* ctx, VOID* v) {
     bpStack.push(PIN_GetContextReg(ctx, REG_RBP));
 }
 
-VOID testRet(VOID* ip, CONTEXT* ctx, VOID* v) {
+VOID verifyRetBP(VOID* ip, CONTEXT* ctx, VOID* v) {
     auto bp{PIN_GetContextReg(ctx, REG_RBP)};
     if (bpStack.top() != PIN_GetContextReg(ctx, REG_RBP)) {
         printf("----------[BASE POINTER MODIFIED]----------\n");
@@ -80,11 +88,72 @@ VOID testRet(VOID* ip, CONTEXT* ctx, VOID* v) {
     }
     bpStack.pop();
 }
+
+VOID logMalloc(ADDRINT* addr) {
+    if (heap.find(*addr) != heap.end()) {
+        heap[*addr] = ACTIVE;
+        return;
+    }
+    heap.insert({*addr, ACTIVE});
+//    heap.insert(addr);
+}
+
+VOID freeMemory(ADDRINT* addr) {
+    if (heap.find(*addr) != heap.end() && heap[*addr] == ACTIVE) {
+        heap[*addr] = FREEING;
+    } else if (heap.find(*addr) != heap.end() && (heap[*addr] == FREEING || heap[*addr] == FREE)) {
+        printf("----------[DOUBLE FREE]----------\n");
+        printf("MEMORY AT 0x%016lx\n", *addr);
+        printf("----------[DOUBLE FREE]----------\n");
+    } else if (heap.find(*addr) == heap.end()) {
+        printf("----------[FREE BEFORE MALLOC]----------\n");
+        printf("MEMORY AT 0x%016lx\n", *addr);
+        printf("----------[FREE BEFORE MALLOC]----------\n");
+    }
+//    heap.erase(*addr);
+}
+
+VOID verifyMemRead(ADDRINT addr) {
+    if (heap.find(addr) != heap.end()) {
+        if (heap[addr] == FREE) {
+            printf("----------[READ AFTER FREE]----------\n");
+            printf("MEMORY AT 0x%016lx\n", addr);
+            printf("----------[READ AFTER FREE]----------\n");
+        }
+    }
+}
+
+VOID verifyMemWrite(ADDRINT addr) {
+    if (heap.find(addr) != heap.end()) {
+        if (heap[addr] == FREE) {
+            printf("----------[WRITE AFTER FREE]----------\n");
+            printf("MEMORY AT 0x%016lx\n", addr);
+            printf("----------[WRITE AFTER FREE]----------\n");
+        } else if (heap[addr] == FREEING) {
+            heap[addr] = FREE;
+        }
+    }
+}
+
 /* ===================================================================== */
 // Instrumentation callbacks
 /* ===================================================================== */
 
 VOID Image(IMG img, VOID* val) {
+    RTN mallocRtn = RTN_FindByName(img, "malloc");
+    if (RTN_Valid(mallocRtn)) {
+        RTN_Open(mallocRtn);
+        RTN_InsertCall(mallocRtn, IPOINT_AFTER, (AFUNPTR) logMalloc, IARG_FUNCRET_EXITPOINT_REFERENCE, IARG_END);
+        RTN_Close(mallocRtn);
+    }
+
+    RTN freeRtn = RTN_FindByName(img, "free");
+    if (RTN_Valid(freeRtn)) {
+        RTN_Open(freeRtn);
+        RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) freeMemory, IARG_FUNCARG_ENTRYPOINT_REFERENCE, 0,
+                       IARG_END);
+        RTN_Close(freeRtn);
+    }
     if (IMG_IsMainExecutable(img)) {
         mainImage = IMG_Name(img);
         printf("[MAIN EXECUTABLE]: %s\n", mainImage.c_str());
@@ -103,50 +172,31 @@ VOID Routine(RTN rtn, VOID* val) {
 VOID Instruction(INS ins, VOID* val) {
     if (INS_IsCall(ins)) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) insertCallIntoStack, IARG_ADDRINT, INS_NextAddress(ins), IARG_END);
-        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR) testCall, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
+        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR) insertBP, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
     } else if (INS_IsRet(ins)) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetTarget, IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) testRet, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetBP, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
+    }
+    if (INS_IsMemoryRead(ins)) {
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyMemRead, IARG_MEMORYREAD_EA, IARG_END);
+    }
+    if (INS_IsMemoryWrite(ins)) {
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyMemWrite, IARG_MEMORYWRITE_EA, IARG_END);
     }
 }
 
-/*!
- * Print out analysis results.
- * This function is called when the application exits.
- *                              PIN_AddFiniFunction function call
- */
-VOID Fini(INT32 code, VOID* v)
-{
-}
 
-/*!
- * The main procedure of the tool.
- * This function is called when the application image is loaded but not yet started.
- * @param[in]   argc            total number of elements in the argv array
- * @param[in]   argv            array of command line arguments,
- *                              including pin -t <tool-name> -- ...
- */
+VOID Fini(INT32 code, VOID* v) {}
+
 int main(int argc, char* argv[])
 {
-    // Initialize PIN library. Print help message if -h(elp) is specified
-    // in the command line or the command line is invalid
-    if (PIN_Init(argc, argv))
-    {
+    if (PIN_Init(argc, argv)) {
         return Usage();
     }
-
-
-    // Register function to be called to instrument traces
-    //TRACE_AddInstrumentFunction(Trace, 0);
-
     IMG_AddInstrumentFunction(Image, nullptr);
     RTN_AddInstrumentFunction(Routine, nullptr);
     INS_AddInstrumentFunction(Instruction, nullptr);
 
-    // Register function to be called when the application exits
-    PIN_AddFiniFunction(Fini, nullptr);
-
-    // Start the program, never returns
     PIN_InitSymbols();
     PIN_StartProgram();
 
