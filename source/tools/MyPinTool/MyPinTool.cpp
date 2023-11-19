@@ -2,7 +2,6 @@
 #include <iostream>
 #include <stack>
 #include <algorithm>
-#include <unordered_map>
 
 /* ================================================================== */
 // Global variables
@@ -14,14 +13,6 @@ std::string mainImage;
 
 #define MALLOC_FUNC "malloc"
 #define FREE_FUNC "free"
-
-enum MEMSTATE {
-    ACTIVE,
-    FREEING,
-    FREE
-};
-
-std::unordered_map<ADDRINT, MEMSTATE> heap;
 
 /* ===================================================================== */
 // Command line switches
@@ -65,7 +56,6 @@ VOID printRoutineName(VOID* name) {
     printf("[ROUTINE]: %s\n", nameStr.c_str());
 }
 
-
 VOID insertBP(VOID* ip, CONTEXT* ctx, VOID* v) {
     bpStack.push(PIN_GetContextReg(ctx, REG_RBP));
 }
@@ -80,76 +70,11 @@ VOID verifyRetBP(VOID* ip, CONTEXT* ctx, VOID* v) {
     bpStack.pop();
 }
 
-VOID logMalloc(ADDRINT* addr) {
-    if (heap.find(*addr) != heap.end()) {
-        heap[*addr] = ACTIVE;
-        return;
-    }
-    printf("malloc AT 0x%016lx\n", *addr);
-    heap.insert({*addr, ACTIVE});
-}
-
-VOID freeMemory(ADDRINT* addr) {
-    if (heap.find(*addr) != heap.end() && heap[*addr] == ACTIVE) {
-        heap[*addr] = FREEING;
-    } else if (heap.find(*addr) != heap.end() && (heap[*addr] == FREEING || heap[*addr] == FREE)) {
-        printf("----------[DOUBLE FREE]----------\n");
-        printf("MEMORY AT 0x%016lx\n", *addr);
-        if (heap[*addr] == FREEING) {
-            printf("status freeing\n");
-        } else if (heap[*addr] == FREE) {
-            printf("status free");
-        }
-        printf("---------------------------------\n");
-    } else if (heap.find(*addr) == heap.end()) {
-        printf("----------[FREE BEFORE MALLOC]----------\n");
-        printf("MEMORY AT 0x%016lx\n", *addr);
-        printf("----------------------------------------\n");
-    }
-}
-
-VOID verifyMemRead(ADDRINT addr) {
-    if (heap.find(addr) != heap.end()) {
-        if (heap[addr] == FREE) {
-            printf("----------[READ AFTER FREE]----------\n");
-            printf("MEMORY AT 0x%016lx\n", addr);
-            printf("-------------------------------------\n");
-        }
-    }
-}
-
-VOID verifyMemWrite(ADDRINT addr) {
-    if (heap.find(addr) != heap.end()) {
-        if (heap[addr] == FREE) {
-            printf("----------[WRITE AFTER FREE]----------\n");
-            printf("MEMORY AT 0x%016lx\n", addr);
-            printf("--------------------------------------\n");
-        } else if (heap[addr] == FREEING) {
-            printf("free AT 0x%016lx\n", addr);
-            heap[addr] = FREE;
-        }
-    }
-}
-
 /* ===================================================================== */
 // Instrumentation callbacks
 /* ===================================================================== */
 
 VOID Image(IMG img, VOID* val) {
-    RTN mallocRtn = RTN_FindByName(img, MALLOC_FUNC);
-    if (RTN_Valid(mallocRtn)) {
-        RTN_Open(mallocRtn);
-        RTN_InsertCall(mallocRtn, IPOINT_AFTER, (AFUNPTR) logMalloc, IARG_FUNCRET_EXITPOINT_REFERENCE, IARG_END);
-        RTN_Close(mallocRtn);
-    }
-
-    RTN freeRtn = RTN_FindByName(img, FREE_FUNC);
-    if (RTN_Valid(freeRtn)) {
-        RTN_Open(freeRtn);
-        RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) freeMemory, IARG_FUNCARG_ENTRYPOINT_REFERENCE, 0,
-                       IARG_END);
-        RTN_Close(freeRtn);
-    }
     if (IMG_IsMainExecutable(img)) {
         mainImage = IMG_Name(img);
         printf("[MAIN EXECUTABLE]: %s\n", mainImage.c_str());
@@ -173,14 +98,7 @@ VOID Instruction(INS ins, VOID* val) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetTarget, IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetBP, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
     }
-    if (INS_IsMemoryRead(ins)) {
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyMemRead, IARG_MEMORYREAD_EA, IARG_END);
-    }
-    if (INS_IsMemoryWrite(ins)) {
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyMemWrite, IARG_MEMORYWRITE_EA, IARG_END);
-    }
 }
-
 
 VOID Fini(INT32 code, VOID* v) {}
 
