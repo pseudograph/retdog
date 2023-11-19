@@ -1,28 +1,16 @@
-/*
- * Copyright (C) 2007-2021 Intel Corporation.
- * SPDX-License-Identifier: MIT
- */
-
-/*! @file
- *  This is an example of the PIN tool that demonstrates some basic PIN APIs
- *  and could serve as the starting point for developing your first PIN tool
- */
-
 #include "pin.H"
 #include <iostream>
 #include <stack>
+#include <algorithm>
+#include <unordered_map>
 
-struct Frame {
-    ADDRINT
-    long unsigned int ret;
-};
 /* ================================================================== */
 // Global variables
 /* ================================================================== */
 
 std::stack<ADDRINT> callStack;
-std::string currentRoutine;
 std::string mainImage;
+std::unordered_map<ADDRINT, bool> heap;
 
 /* ===================================================================== */
 // Command line switches
@@ -54,26 +42,33 @@ VOID insertCallIntoStack(ADDRINT ret) {
     callStack.push(ret);
 }
 
-
 VOID verifyRetTarget(ADDRINT esp) {
     ADDRINT ret;
     PIN_SafeCopy(&ret, (void*)esp, sizeof(ADDRINT)); // Safely read the return address
 
     if (ret != callStack.top()) {
-        printf("----------[ILLEGAL RETURN]----------\n");
+        printf("----------[RETURN ADDRESS MODIFIED]----------\n");
         printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", callStack.top(), ret);
-        printf("----------[ILLEGAL RETURN]----------\n");
+        printf("----------[RETURN ADDRESS MODIFIED]----------\n");
     }
 
     callStack.pop();
 }
 
-
 VOID printRoutineName(VOID* name) {
-    printf("[ROUTINE]: %s\n", (char*) name);
+    std::string nameStr{(char*)name};
+    nameStr.erase(std::remove_if(nameStr.begin(), nameStr.end(), isspace), nameStr.end());
+    printf("[ROUTINE]: %s\n", nameStr.c_str());
 }
 
-VOID verifyBasePtr
+VOID testCall(REG bp) {
+    REG_
+    printf("taken branch bp: 0x%016x\n", bp);
+}
+
+VOID testRet(REG bp) {
+    printf("ret bp: 0x%016x\n", bp);
+}
 /* ===================================================================== */
 // Instrumentation callbacks
 /* ===================================================================== */
@@ -97,10 +92,10 @@ VOID Routine(RTN rtn, VOID* val) {
 VOID Instruction(INS ins, VOID* val) {
     if (INS_IsCall(ins)) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) insertCallIntoStack, IARG_ADDRINT, INS_NextAddress(ins), IARG_END);
+        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR) testCall, IARG_REG_VALUE, REG_BP, IARG_END);
     } else if (INS_IsRet(ins)) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetTarget, IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
-    } else {
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyBasePtr, IARG_REG_VALUE, REG_BP, IARG_END);
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) testRet, IARG_REG_VALUE, REG_BP, IARG_END);
     }
 }
 
@@ -118,7 +113,7 @@ VOID Fini(INT32 code, VOID* v)
  * This function is called when the application image is loaded but not yet started.
  * @param[in]   argc            total number of elements in the argv array
  * @param[in]   argv            array of command line arguments,
- *                              including pin -t <toolname> -- ...
+ *                              including pin -t <tool-name> -- ...
  */
 int main(int argc, char* argv[])
 {
@@ -133,12 +128,12 @@ int main(int argc, char* argv[])
     // Register function to be called to instrument traces
     //TRACE_AddInstrumentFunction(Trace, 0);
 
-    IMG_AddInstrumentFunction(Image, 0);
-    RTN_AddInstrumentFunction(Routine, 0);
-    INS_AddInstrumentFunction(Instruction, 0);
+    IMG_AddInstrumentFunction(Image, nullptr);
+    RTN_AddInstrumentFunction(Routine, nullptr);
+    INS_AddInstrumentFunction(Instruction, nullptr);
 
     // Register function to be called when the application exits
-    PIN_AddFiniFunction(Fini, 0);
+    PIN_AddFiniFunction(Fini, nullptr);
 
     // Start the program, never returns
     PIN_InitSymbols();
