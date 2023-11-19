@@ -1,3 +1,3 @@
 Pin: pin-3.28-98749-6643ecee5
 Copyright 2002-2023 Intel Corporation.
-E:  MyPinTool.cpp:106 Inserting IPOINT_AFTER with invalid instruction (     2 0x00007fccaf9052a3 call 0x7fccaf905f00). See INS_IsValidForIpointAfter()
+E:  Register bp is NOT supported for PIN_GetContextReg/PIN_SetContextReg

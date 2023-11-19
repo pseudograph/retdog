@@ -8,9 +8,14 @@
 // Global variables
 /* ================================================================== */
 
+struct Snapshot {
+    ADDRINT ret;
+    ADDRINT bp;
+};
+
 std::stack<ADDRINT> callStack;
+std::stack<ADDRINT> bpStack;
 std::string mainImage;
-std::unordered_map<ADDRINT, bool> heap;
 
 /* ===================================================================== */
 // Command line switches
@@ -61,13 +66,19 @@ VOID printRoutineName(VOID* name) {
     printf("[ROUTINE]: %s\n", nameStr.c_str());
 }
 
-VOID testCall(REG bp) {
-    REG_
-    printf("taken branch bp: 0x%016x\n", bp);
+
+VOID testCall(VOID* ip, CONTEXT* ctx, VOID* v) {
+    bpStack.push(PIN_GetContextReg(ctx, REG_RBP));
 }
 
-VOID testRet(REG bp) {
-    printf("ret bp: 0x%016x\n", bp);
+VOID testRet(VOID* ip, CONTEXT* ctx, VOID* v) {
+    auto bp{PIN_GetContextReg(ctx, REG_RBP)};
+    if (bpStack.top() != PIN_GetContextReg(ctx, REG_RBP)) {
+        printf("----------[BASE POINTER MODIFIED]----------\n");
+        printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", bpStack.top(), bp);
+        printf("----------[BASE POINTER MODIFIED]----------\n");
+    }
+    bpStack.pop();
 }
 /* ===================================================================== */
 // Instrumentation callbacks
@@ -92,10 +103,10 @@ VOID Routine(RTN rtn, VOID* val) {
 VOID Instruction(INS ins, VOID* val) {
     if (INS_IsCall(ins)) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) insertCallIntoStack, IARG_ADDRINT, INS_NextAddress(ins), IARG_END);
-        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR) testCall, IARG_REG_VALUE, REG_BP, IARG_END);
+        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR) testCall, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
     } else if (INS_IsRet(ins)) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetTarget, IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) testRet, IARG_REG_VALUE, REG_BP, IARG_END);
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) testRet, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
     }
 }
 
