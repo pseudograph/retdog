@@ -38,12 +38,8 @@ std::unordered_map<ADDRINT, MEMSTATE> heap;
  */
 INT32 Usage()
 {
-    std::cerr << "This tool prints out the number of dynamically executed " << std::endl
-         << "instructions, basic blocks and threads in the application." << std::endl
-         << std::endl;
-
+    std::cerr << "Monitors control flow and heap allocations for errors." << std::endl;
     std::cerr << KNOB_BASE::StringKnobSummary() << std::endl;
-
     return -1;
 }
 
@@ -62,7 +58,7 @@ VOID verifyRetTarget(ADDRINT esp) {
     if (ret != callStack.top()) {
         printf("----------[RETURN ADDRESS MODIFIED]----------\n");
         printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", callStack.top(), ret);
-        printf("----------[RETURN ADDRESS MODIFIED]----------\n");
+        printf("---------------------------------------------\n");
     }
 
     callStack.pop();
@@ -84,7 +80,7 @@ VOID verifyRetBP(VOID* ip, CONTEXT* ctx, VOID* v) {
     if (bpStack.top() != PIN_GetContextReg(ctx, REG_RBP)) {
         printf("----------[BASE POINTER MODIFIED]----------\n");
         printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", bpStack.top(), bp);
-        printf("----------[BASE POINTER MODIFIED]----------\n");
+        printf("-------------------------------------------\n");
     }
     bpStack.pop();
 }
@@ -95,7 +91,6 @@ VOID logMalloc(ADDRINT* addr) {
         return;
     }
     heap.insert({*addr, ACTIVE});
-//    heap.insert(addr);
 }
 
 VOID freeMemory(ADDRINT* addr) {
@@ -104,13 +99,12 @@ VOID freeMemory(ADDRINT* addr) {
     } else if (heap.find(*addr) != heap.end() && (heap[*addr] == FREEING || heap[*addr] == FREE)) {
         printf("----------[DOUBLE FREE]----------\n");
         printf("MEMORY AT 0x%016lx\n", *addr);
-        printf("----------[DOUBLE FREE]----------\n");
+        printf("---------------------------------\n");
     } else if (heap.find(*addr) == heap.end()) {
         printf("----------[FREE BEFORE MALLOC]----------\n");
         printf("MEMORY AT 0x%016lx\n", *addr);
-        printf("----------[FREE BEFORE MALLOC]----------\n");
+        printf("----------------------------------------\n");
     }
-//    heap.erase(*addr);
 }
 
 VOID verifyMemRead(ADDRINT addr) {
@@ -118,7 +112,7 @@ VOID verifyMemRead(ADDRINT addr) {
         if (heap[addr] == FREE) {
             printf("----------[READ AFTER FREE]----------\n");
             printf("MEMORY AT 0x%016lx\n", addr);
-            printf("----------[READ AFTER FREE]----------\n");
+            printf("-------------------------------------\n");
         }
     }
 }
@@ -128,7 +122,7 @@ VOID verifyMemWrite(ADDRINT addr) {
         if (heap[addr] == FREE) {
             printf("----------[WRITE AFTER FREE]----------\n");
             printf("MEMORY AT 0x%016lx\n", addr);
-            printf("----------[WRITE AFTER FREE]----------\n");
+            printf("--------------------------------------\n");
         } else if (heap[addr] == FREEING) {
             heap[addr] = FREE;
         }
