@@ -22,7 +22,8 @@ std::string mainImage;
 enum RESPONSE {
     CONTINUE,
     EXIT,
-    RECOVER
+    RECOVER,
+    ERROR
 };
 
 INT32 Usage()
@@ -35,19 +36,18 @@ INT32 Usage()
 RESPONSE askUserToContinue() {
     std::string input{};
     do {
-        printf("CONTINUE EXECUTION? y/n \n");
+        printf("Continue execution? y (yes)/n (no)/r (recover [unstable]) \n");
         input.clear();
         std::getline(std::cin, input);
         if (input == "n") {
-            printf("EXITING\n");
-            printf("---------------------------------------------\n");
-            PIN_ExitProcess(1);
+            return EXIT;
         } else if (input == "y") {
-            printf("CONTINUING\n");
-            printf("---------------------------------------------\n");
-            break;
+            return CONTINUE;
+        } else if (input == "r") {
+            return RECOVER;
         }
-    } while (input != "y" && input != "n");
+    } while (input != "y" && input != "n" && input != "r");
+    return ERROR;
 }
 
 /* ===================================================================== */
@@ -58,14 +58,32 @@ VOID insertCallIntoStack(ADDRINT ret) {
     callStack.push(ret);
 }
 
-VOID verifyRetTarget(ADDRINT esp) {
+VOID verifyRetTarget(ADDRINT esp, CONTEXT* ctx) {
     ADDRINT ret;
-    PIN_SafeCopy(&ret, (void*)esp, sizeof(ADDRINT)); // Safely read the return address
-
+    PIN_SafeCopy(&ret, (void*)esp, sizeof(ADDRINT));
     if (ret != callStack.top()) {
-        printf("----------[RETURN ADDRESS MODIFIED]----------\n");
-        printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", callStack.top(), ret);
+        printf("----------[Return address modified]----------\n");
+        printf("Expected: 0x%016lx | Actual: 0x%016lx\n", callStack.top(), ret);
         RESPONSE response{askUserToContinue()};
+        switch (response) {
+            case CONTINUE:
+                printf("Continuing\n");
+                printf("---------------------------------------------\n");
+                break;
+            case EXIT:
+                printf("Exiting\n");
+                printf("---------------------------------------------\n");
+                PIN_ExitProcess(1);
+            case RECOVER:
+                printf("Recovering: overwriting return address with expected\n");
+                PIN_SafeCopy((ADDRINT*)esp, &callStack.top(), sizeof(ADDRINT));
+                printf("Trying to resume execution\n");
+                printf("---------------------------------------------\n");
+                break;
+            case ERROR:
+                printf("RESPONSE ERROR");
+                break;
+        }
     }
     callStack.pop();
 }
@@ -80,12 +98,31 @@ VOID insertBP(VOID* ip, CONTEXT* ctx, VOID* v) {
     bpStack.push(PIN_GetContextReg(ctx, REG_RBP));
 }
 
-VOID verifyRetBP(VOID* ip, CONTEXT* ctx, VOID* v) {
+VOID verifyRetBP(VOID* ip, CONTEXT* ctx, ADDRINT bpReg, VOID* v) {
     auto bp{PIN_GetContextReg(ctx, REG_RBP)};
     if (bpStack.top() != PIN_GetContextReg(ctx, REG_RBP)) {
         printf("----------[BASE POINTER MODIFIED]----------\n");
         printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", bpStack.top(), bp);
-        askUserToContinue();
+        RESPONSE response{askUserToContinue()};
+        switch (response) {
+            case CONTINUE:
+                printf("Continuing\n");
+                printf("---------------------------------------------\n");
+                break;
+            case EXIT:
+                printf("Exiting\n");
+                printf("---------------------------------------------\n");
+                PIN_ExitProcess(1);
+            case RECOVER:
+                printf("Recovering\n");
+                PIN_SafeCopy((ADDRINT*)bp, &bpStack.top(), sizeof(ADDRINT));
+                printf("Trying to resume execution\n");
+                printf("---------------------------------------------\n");
+                break;
+            case ERROR:
+                printf("RESPONSE ERROR");
+                break;
+        }
     }
     bpStack.pop();
 }
@@ -115,8 +152,8 @@ VOID Instruction(INS ins, VOID* val) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) insertCallIntoStack, IARG_ADDRINT, INS_NextAddress(ins), IARG_END);
         INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR) insertBP, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
     } else if (INS_IsRet(ins)) {
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetTarget, IARG_REG_VALUE, REG_STACK_PTR, IARG_END);
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetBP, IARG_INST_PTR, IARG_CONTEXT, IARG_END);
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetTarget, IARG_REG_VALUE, REG_STACK_PTR, IARG_CONTEXT, IARG_END);
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) verifyRetBP, IARG_INST_PTR, IARG_CONTEXT, IARG_REG_VALUE, REG_BP, IARG_END);
     }
 }
 
