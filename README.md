@@ -38,4 +38,4 @@ Example usage (target is a program that copies stdin input into a buffer using s
 
 ![image](https://github.com/pseudograph/retdog/assets/60597985/5acf3eef-8167-418c-8f3c-faffa363a62a)
 
-Retdog was made for CS5231.
+CS5231 Team29
