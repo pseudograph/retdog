@@ -33,3 +33,9 @@ cd source/tools
 ```
 
 Replace /bin/ls with your target application.
+
+Example usage (target is a program that copies stdin input into a buffer using strcpy, causing a simple buffer overflow):
+
+![image](https://github.com/pseudograph/retdog/assets/60597985/5acf3eef-8167-418c-8f3c-faffa363a62a)
+
+Retdog was made for CS5231.
