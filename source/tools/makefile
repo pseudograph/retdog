@@ -10,7 +10,7 @@
 # All directories which contain tests should be placed here.
 # Please maintain alphabetical order.
 
-ALL_TEST_DIRS :=  MyPinTool
+ALL_TEST_DIRS :=  MyPinTool Retdog
 
 # All directories which contain utilities for the test system should be placed here.
 # Please maintain alphabetical order.
