@@ -101,7 +101,7 @@ VOID insertBP(VOID* ip, CONTEXT* ctx, VOID* v) {
 VOID verifyRetBP(VOID* ip, CONTEXT* ctx, ADDRINT bpReg, VOID* v) {
     auto bp{PIN_GetContextReg(ctx, REG_RBP)};
     if (bpStack.top() != PIN_GetContextReg(ctx, REG_RBP)) {
-        printf("----------[BASE POINTER MODIFIED]----------\n");
+        printf("----------[SAVED BASE POINTER MODIFIED]----------\n");
         printf("Expected: 0x%016lx | Actual: 0x%016lx\n", bpStack.top(), bp);
         RESPONSE response{askUserToContinue()};
         switch (response) {
@@ -114,7 +114,7 @@ VOID verifyRetBP(VOID* ip, CONTEXT* ctx, ADDRINT bpReg, VOID* v) {
                 printf("---------------------------------------------\n");
                 PIN_ExitProcess(1);
             case RECOVER:
-                printf("Recovering\n");
+                printf("Recovering: overwriting saved base pointer with expected\n");
                 PIN_SafeCopy((ADDRINT*)bp, &bpStack.top(), sizeof(ADDRINT));
                 printf("Trying to resume execution\n");
                 printf("---------------------------------------------\n");
