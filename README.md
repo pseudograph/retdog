@@ -36,6 +36,6 @@ Replace /bin/ls with your target application.
 
 Example usage (target is a program that copies stdin input into a buffer using strcpy, causing a simple buffer overflow):
 
-![image](https://github.com/pseudograph/retdog/assets/60597985/5acf3eef-8167-418c-8f3c-faffa363a62a)
+![image](https://github.com/pseudograph/retdog/assets/60597985/f2ce228f-2fbf-434c-8b80-a33ad63a102c)
 
 CS5231 Team29
