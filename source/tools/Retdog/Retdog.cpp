@@ -19,11 +19,35 @@ std::string mainImage;
 // Utilities
 /* ===================================================================== */
 
+enum RESPONSE {
+    CONTINUE,
+    EXIT,
+    RECOVER
+};
+
 INT32 Usage()
 {
     std::cerr << "Monitors control flow and heap allocations for errors." << std::endl;
     std::cerr << KNOB_BASE::StringKnobSummary() << std::endl;
     return -1;
+}
+
+RESPONSE askUserToContinue() {
+    std::string input{};
+    do {
+        printf("CONTINUE EXECUTION? y/n \n");
+        input.clear();
+        std::getline(std::cin, input);
+        if (input == "n") {
+            printf("EXITING\n");
+            printf("---------------------------------------------\n");
+            PIN_ExitProcess(1);
+        } else if (input == "y") {
+            printf("CONTINUING\n");
+            printf("---------------------------------------------\n");
+            break;
+        }
+    } while (input != "y" && input != "n");
 }
 
 /* ===================================================================== */
@@ -41,9 +65,8 @@ VOID verifyRetTarget(ADDRINT esp) {
     if (ret != callStack.top()) {
         printf("----------[RETURN ADDRESS MODIFIED]----------\n");
         printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", callStack.top(), ret);
-        printf("---------------------------------------------\n");
+        RESPONSE response{askUserToContinue()};
     }
-
     callStack.pop();
 }
 
@@ -62,7 +85,7 @@ VOID verifyRetBP(VOID* ip, CONTEXT* ctx, VOID* v) {
     if (bpStack.top() != PIN_GetContextReg(ctx, REG_RBP)) {
         printf("----------[BASE POINTER MODIFIED]----------\n");
         printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", bpStack.top(), bp);
-        printf("-------------------------------------------\n");
+        askUserToContinue();
     }
     bpStack.pop();
 }
