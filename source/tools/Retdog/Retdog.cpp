@@ -36,7 +36,7 @@ INT32 Usage()
 RESPONSE askUserToContinue() {
     std::string input{};
     do {
-        printf("Continue execution? y (yes)/n (no)/r (recover [unstable]) \n");
+        printf("Continue execution? y (yes) || n (no) || r (recover [unstable]) \n");
         input.clear();
         std::getline(std::cin, input);
         if (input == "n") {
