@@ -62,7 +62,7 @@ VOID verifyRetTarget(ADDRINT esp, CONTEXT* ctx) {
     ADDRINT ret;
     PIN_SafeCopy(&ret, (void*)esp, sizeof(ADDRINT));
     if (ret != callStack.top()) {
-        printf("----------[Return address modified]----------\n");
+        printf("----------[RETURN ADDRESS MODIFIED]----------\n");
         printf("Expected: 0x%016lx | Actual: 0x%016lx\n", callStack.top(), ret);
         RESPONSE response{askUserToContinue()};
         switch (response) {
@@ -102,7 +102,7 @@ VOID verifyRetBP(VOID* ip, CONTEXT* ctx, ADDRINT bpReg, VOID* v) {
     auto bp{PIN_GetContextReg(ctx, REG_RBP)};
     if (bpStack.top() != PIN_GetContextReg(ctx, REG_RBP)) {
         printf("----------[BASE POINTER MODIFIED]----------\n");
-        printf("EXPECTED: 0x%016lx | ACTUAL: 0x%016lx\n", bpStack.top(), bp);
+        printf("Expected: 0x%016lx | Actual: 0x%016lx\n", bpStack.top(), bp);
         RESPONSE response{askUserToContinue()};
         switch (response) {
             case CONTINUE:
