@@ -28,7 +28,7 @@ enum RESPONSE {
 
 INT32 Usage()
 {
-    std::cerr << "Monitors control flow and heap allocations for errors." << std::endl;
+    std::cerr << "Monitors control flow for errors." << std::endl;
     std::cerr << KNOB_BASE::StringKnobSummary() << std::endl;
     return -1;
 }
