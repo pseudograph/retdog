@@ -11,9 +11,6 @@ std::stack<ADDRINT> callStack;
 std::stack<ADDRINT> bpStack;
 std::string mainImage;
 
-#define MALLOC_FUNC "malloc"
-#define FREE_FUNC "free"
-
 /* ===================================================================== */
 // Command line switches
 /* ===================================================================== */
